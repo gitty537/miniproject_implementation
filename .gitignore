@@ -1,0 +1,27 @@
+# Environment
+.venv/
+venv/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Database (Do not push your local records!)
+alerts.db
+*.sqlite3
+
+# Uploaded & Temporary Video Files
+uploaded_*
+*.mp4
+*.avi
+*.mov
+
+# Debugging Scripts / Scratchpad
+err500.txt
+test_server.py
+test.py
+
+# IDE / Editor Files
+.vscode/
+.idea/

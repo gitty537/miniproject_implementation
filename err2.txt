@@ -1,0 +1,50 @@
+Traceback (most recent call last):
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\ultralytics\nn\tasks.py", line 781, in torch_safe_load
+    ckpt = torch.load(file, map_location="cpu")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\test.py", line 7, in safe_load
+    return _original_load(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\torch\serialization.py", line 1549, in load
+    return _load(
+           ^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\torch\serialization.py", line 2143, in _load
+    result = unpickler.load()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\torch\serialization.py", line 2132, in find_class
+    return super().find_class(mod_name, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'mmcv'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\test.py", line 14, in <module>
+    model_raw = YOLO("best.pt")
+                ^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\ultralytics\models\yolo\model.py", line 23, in __init__
+    super().__init__(model=model, task=task, verbose=verbose)
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\ultralytics\engine\model.py", line 149, in __init__
+    self._load(model, task=task)
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\ultralytics\engine\model.py", line 230, in _load
+    self.model, self.ckpt = attempt_load_one_weight(weights)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\ultralytics\nn\tasks.py", line 855, in attempt_load_one_weight
+    ckpt, weight = torch_safe_load(weight)  # load ckpt
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\ultralytics\nn\tasks.py", line 801, in torch_safe_load
+    ckpt = torch.load(file, map_location="cpu")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\test.py", line 7, in safe_load
+    return _original_load(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\torch\serialization.py", line 1549, in load
+    return _load(
+           ^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\torch\serialization.py", line 2143, in _load
+    result = unpickler.load()
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\admin\Downloads\ppe_backend\ppe_backend\.venv\Lib\site-packages\torch\serialization.py", line 2132, in find_class
+    return super().find_class(mod_name, name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'mmcv'

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPE Detection Dashboard</title>
+<style>
+  :root {
+    --bg: #0d0d10;
+    --surface: #16161c;
+    --surface2: #1e1e26;
+    --border: #2a2a36;
+    --text: #e2e2ec;
+    --muted: #6b6b82;
+    --accent: #00c896;
+    --danger: #ff4444;
+    --warn: #ffaa00;
+    --info: #4488ff;
+    --mono: 'Courier New', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, sans-serif;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 52px 1fr;
+    overflow: hidden;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.3px; }
+  .topbar h1 span { color: var(--accent); }
+  .spacer { flex: 1; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.live { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 1.6s infinite; }
+  #status-text { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  /* ── Main layout ── */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    overflow: hidden;
+  }
+
+  /* ── Video panel ── */
+  .video-panel {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 12px;
+    overflow: hidden;
+  }
+
+  .video-wrap {
+    position: relative;
+    flex: 1;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px dashed var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    transition: border-color 0.2s;
+  }
+  .video-wrap.dragover {
+    border-color: var(--accent);
+    background: rgba(0, 200, 150, 0.05);
+  }
+
+  #video-feed {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .no-feed {
+    text-align: center;
+    color: var(--muted);
+  }
+  .no-feed .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+  .no-feed p { font-size: 13px; }
+
+  /* Violation flash overlay */
+  .violation-flash {
+    position: absolute;
+    inset: 0;
+    border: 3px solid var(--danger);
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+  .violation-flash.show { opacity: 1; animation: flash 0.6s ease-out forwards; }
+  @keyframes flash { 0%{opacity:1} 100%{opacity:0} }
+
+  /* Progress bar */
+  .progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .progress-track {
+    flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+    width: 0%;
+  }
+
+  /* Controls */
+  .controls { display: flex; gap: 8px; align-items: center; }
+
+  .path-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+    outline: none;
+  }
+  .path-input:focus { border-color: var(--accent); }
+  .path-input::placeholder { color: var(--muted); }
+
+  .btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-start { background: var(--accent); color: #000; }
+  .btn-start:hover { background: #00e5ac; }
+  .btn-pause { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-pause:hover { border-color: var(--warn); color: var(--warn); }
+  .btn-stop  { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-stop:hover  { border-color: var(--danger); color: var(--danger); }
+
+  /* ── Right panel ── */
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  /* Stats row */
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat {
+    background: var(--surface);
+    padding: 14px 16px;
+  }
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .stat-val { font-size: 22px; font-weight: 700; font-family: var(--mono); color: var(--text); }
+  .stat-val.danger { color: var(--danger); }
+  .stat-val.ok { color: var(--accent); }
+
+  /* Detection legend */
+  .legend {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* Alert log */
+  .alert-header {
+    padding: 12px 16px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .alert-count {
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-family: var(--mono);
+    min-width: 20px;
+    text-align: center;
+  }
+
+  .alert-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .alert-list::-webkit-scrollbar { width: 4px; }
+  .alert-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .alert-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    animation: slideIn 0.2s ease;
+  }
+  @keyframes slideIn { from { opacity:0; transform:translateX(8px); } to { opacity:1; transform:none; } }
+  @keyframes fadeOut { to { opacity:0; transform:translateY(-10px); } }
+
+  .alert-icon {
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    background: rgba(255,68,68,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0; margin-top: 1px;
+    color: var(--danger);
+  }
+  .alert-body { flex: 1; min-width: 0; }
+  .alert-msg { font-size: 12px; color: var(--text); font-weight: 500; }
+  .alert-meta { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+
+  .no-alerts {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  /* Detections live list */
+  .det-header {
+    padding: 10px 16px 8px;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .det-list {
+    padding: 6px 16px 10px;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    min-height: 44px;
+  }
+  .det-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-weight: 500;
+  }
+  .det-person  { background: rgba(100,100,120,0.3); color: #aaa; }
+  .det-helmet  { background: rgba(0,200,150,0.15); color: var(--accent); }
+  .det-vest    { background: rgba(68,136,255,0.15); color: var(--info); }
+  .det-violation { background: rgba(255,68,68,0.15); color: var(--danger); border: 1px solid rgba(255,68,68,0.3); }
+</style>
+</head>
+<body>
+
+<!-- ── Top bar ── -->
+<div class="topbar">
+  <div class="dot" id="live-dot"></div>
+  <h1>PPE Detection <span>Dashboard</span></h1>
+  <span id="status-text">Disconnected</span>
+  <div class="spacer"></div>
+  <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="fps-counter"></span>
+</div>
+
+<!-- ── Main layout ── -->
+<div class="main">
+
+  <!-- Left: video -->
+  <div class="video-panel">
+
+    <div class="video-wrap" id="video-wrap">
+      <div class="no-feed" id="no-feed">
+        <div class="icon">▶</div>
+        <p>Drag and drop a video here, or enter a path below</p>
+      </div>
+      <img id="video-feed" style="display:none" alt="video feed"/>
+      <div class="violation-flash" id="violation-flash"></div>
+    </div>
+
+    <div class="progress-wrap">
+      <span id="frame-counter">0 / 0</span>
+      <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+    </div>
+
+    <div class="controls">
+      <input class="path-input" id="path-input"
+             placeholder="Path to video — e.g. C:\site\video.mp4 or /home/user/site.mp4"
+             value="sample.mp4"/>
+      <button class="btn btn-start"  onclick="startDetection()">▶ Start</button>
+      <button class="btn" style="background:var(--info); color:#fff;" onclick="startWebcam()">📷 Webcam</button>
+      <button class="btn btn-pause"  onclick="pauseDetection()">⏸ Pause</button>
+      <button class="btn btn-stop"   onclick="stopDetection()">⏹ Stop</button>
+    </div>
+
+  </div>
+
+  <!-- Right: stats + alerts -->
+  <div class="right-panel">
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Frame</div>
+        <div class="stat-val" id="stat-frame">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Violations</div>
+        <div class="stat-val danger" id="stat-violations">0</div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#888"></div>Person
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--accent)"></div>Helmet
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--info)"></div>Vest
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--danger)"></div>Violation
+      </div>
+    </div>
+
+    <!-- Live detections -->
+    <div class="det-header">Live detections</div>
+    <div class="det-list" id="det-list">
+      <span style="font-size:11px;color:var(--muted)">Waiting...</span>
+    </div>
+
+    <!-- Alert log -->
+    <div class="alert-header">
+      Alert log
+      <span class="alert-count" id="alert-count">0</span>
+    </div>
+    <div class="alert-list" id="alert-list">
+      <div class="no-alerts">No violations detected yet</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let ws = null;
+let paused = false;
+let lastFrameTime = 0;
+let framesSinceLastSec = 0;
+let fpsDisplay = 0;
+let lastViolationCount = 0;
+let lastAlertFrame = -50;
+
+// ── Toast Notification System ─────────────────────────────────────────────
+function createToastContainer() {
+  const c = document.createElement('div');
+  c.id = 'toast-container';
+  c.style.position = 'fixed';
+  c.style.top = '20px';
+  c.style.right = '20px';
+  c.style.zIndex = '9999';
+  c.style.display = 'flex';
+  c.style.flexDirection = 'column';
+  c.style.gap = '10px';
+  document.body.appendChild(c);
+  return c;
+}
+
+function showToast(message) {
+  const container = document.getElementById('toast-container') || createToastContainer();
+  const toast = document.createElement('div');
+  toast.style.background = 'var(--danger)';
+  toast.style.color = '#fff';
+  toast.style.padding = '14px 24px';
+  toast.style.borderRadius = '8px';
+  toast.style.boxShadow = '0 6px 16px rgba(0,0,0,0.4)';
+  toast.style.fontSize = '14px';
+  toast.style.fontWeight = 'bold';
+  toast.style.pointerEvents = 'none';
+  toast.style.animation = 'slideIn 0.3s ease, fadeOut 0.3s ease 3.7s forwards';
+  toast.innerHTML = `⚠ ALERT: ${message}`;
+  
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ── WebSocket connection ──────────────────────────────────────────────────
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+
+  ws.onopen = () => {
+    document.getElementById('live-dot').classList.add('live');
+    document.getElementById('status-text').textContent = 'Connected';
+    document.getElementById('status-text').style.color = 'var(--accent)';
+  };
+
+  ws.onclose = () => {
+    document.getElementById('live-dot').classList.remove('live');
+    document.getElementById('status-text').textContent = 'Disconnected';
+    document.getElementById('status-text').style.color = 'var(--muted)';
+    // Reconnect after 2s
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'frame') handleFrame(msg);
+  };
+}
+
+// ── Handle incoming frame ─────────────────────────────────────────────────
+function handleFrame(msg) {
+  // Video image
+  const img = document.getElementById('video-feed');
+  const noFeed = document.getElementById('no-feed');
+  img.src = 'data:image/jpeg;base64,' + msg.image;
+  img.style.display = 'block';
+  noFeed.style.display = 'none';
+
+  // Progress
+  const frame = msg.frame, total = msg.total;
+  document.getElementById('frame-counter').textContent = `${frame} / ${total}`;
+  document.getElementById('prog-fill').style.width =
+    total > 0 ? (frame / total * 100).toFixed(1) + '%' : '0%';
+
+  // Stats
+  document.getElementById('stat-frame').textContent = frame;
+  const violEl = document.getElementById('stat-violations');
+  if (msg.violations > lastViolationCount) {
+    if (frame - lastAlertFrame >= 50) {
+      if (msg.alerts && msg.alerts.length > 0) {
+        showToast(msg.alerts[0].msg);
+        lastAlertFrame = frame;
+      }
+    }
+  }
+  lastViolationCount = msg.violations;
+  violEl.textContent = msg.violations;
+
+  // Violation flash
+  if (msg.alerts && msg.alerts.length > 0) {
+    const flash = document.getElementById('violation-flash');
+    flash.classList.remove('show');
+    void flash.offsetWidth; // reflow
+    flash.classList.add('show');
+  }
+
+  // Alert log
+  updateAlerts(msg.alerts || [], msg.violations);
+
+  // Live detections tags
+  updateDetections(msg.detections || []);
+
+  // FPS counter
+  const now = performance.now();
+  framesSinceLastSec++;
+  if (now - lastFrameTime >= 1000) {
+    fpsDisplay = framesSinceLastSec;
+    framesSinceLastSec = 0;
+    lastFrameTime = now;
+    document.getElementById('fps-counter').textContent = fpsDisplay + ' fps';
+  }
+}
+
+// ── Update alert log ──────────────────────────────────────────────────────
+let renderedAlertCount = 0;
+
+function updateAlerts(alerts, totalViolations) {
+  document.getElementById('alert-count').textContent = totalViolations;
+  if (alerts.length === 0) return;
+  if (alerts.length === renderedAlertCount) return;
+  renderedAlertCount = alerts.length;
+
+  const list = document.getElementById('alert-list');
+  list.innerHTML = alerts.map(a => `
+    <div class="alert-item">
+      <div class="alert-icon">!</div>
+      <div class="alert-body">
+        <div class="alert-msg">${a.msg}</div>
+        <div class="alert-meta">Frame ${a.frame} · ${a.time}s</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Update live detections ────────────────────────────────────────────────
+function updateDetections(detections) {
+  const list = document.getElementById('det-list');
+  if (detections.length === 0) {
+    list.innerHTML = '<span style="font-size:11px;color:var(--muted)">No detections</span>';
+    return;
+  }
+  list.innerHTML = detections.map(d => {
+    const isViol = d.violation;
+    const cls = isViol ? 'det-violation' : `det-${d.label}`;
+    const tag = isViol
+      ? `⚠ ${d.missing ? d.missing.join(' + ') : 'violation'}`
+      : `${d.label} ${Math.round((d.confidence||0)*100)}%`;
+    return `<span class="det-tag ${cls}">${tag}</span>`;
+  }).join('');
+}
+
+// ── Controls ─────────────────────────────────────────────────────────────
+function startDetection() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const path = document.getElementById('path-input').value.trim();
+  ws.send(JSON.stringify({ action: 'start', path }));
+  document.getElementById('status-text').textContent = 'Running';
+  paused = false;
+}
+
+function pauseDetection() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'pause' }));
+  paused = !paused;
+  document.getElementById('status-text').textContent = paused ? 'Paused' : 'Running';
+}
+
+function stopDetection() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action: 'stop' }));
+  document.getElementById('status-text').textContent = 'Stopped';
+  document.getElementById('video-feed').style.display = 'none';
+  document.getElementById('no-feed').style.display = 'block';
+  renderedAlertCount = 0;
+  lastViolationCount = 0;
+  lastAlertFrame = -50;
+}
+
+function startWebcam() {
+  document.getElementById('path-input').value = '0';
+  startDetection();
+}
+
+// ── Drag and Drop ────────────────────────────────────────────────────────
+const wrap = document.getElementById('video-wrap');
+wrap.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  wrap.classList.add('dragover');
+});
+wrap.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  wrap.classList.remove('dragover');
+});
+wrap.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  wrap.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+
+  document.getElementById('status-text').textContent = 'Uploading...';
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    document.getElementById('path-input').value = data.path;
+    startDetection();
+  } catch (err) {
+    document.getElementById('status-text').textContent = 'Upload Failed';
+  }
+});
+
+// Start WebSocket on load
+connect();
+</script>
+</body>
+</html>
