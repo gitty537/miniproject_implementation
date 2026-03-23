@@ -13,12 +13,15 @@ import sqlite3
 import shutil
 from pathlib import Path
 from collections import deque
+from typing import Optional
 
 import cv2
 import numpy as np
 import onnxruntime as ort
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File
-from fastapi.responses import HTMLResponse
+import bcrypt
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request, Cookie, Query
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 
@@ -194,6 +197,12 @@ static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+# ── Auth Config ──────────────────────────────────────────────────────────────
+SECRET_KEY = "ppe-detection-secret-key-change-me"
+SESSION_MAX_AGE = 86400  # 24 hours
+serializer = URLSafeTimedSerializer(SECRET_KEY)
+
+
 # ── Database ─────────────────────────────────────────────────────────────────
 db_conn = sqlite3.connect("alerts.db", check_same_thread=False)
 db_conn.execute("""
@@ -205,7 +214,42 @@ db_conn.execute("""
         message   TEXT
     )
 """)
+db_conn.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+    )
+""")
 db_conn.commit()
+
+# Create default admin user if no users exist
+_cur = db_conn.execute("SELECT COUNT(*) FROM users")
+if _cur.fetchone()[0] == 0:
+    _hashed = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
+    db_conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("admin", _hashed))
+    db_conn.commit()
+    print("[AUTH] Created default admin user  (admin / admin123)")
+
+
+# ── Auth Helpers ─────────────────────────────────────────────────────────────
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+def create_session(username: str) -> str:
+    return serializer.dumps({"user": username})
+
+def get_current_user(session_token: Optional[str]) -> Optional[str]:
+    if not session_token:
+        return None
+    try:
+        data = serializer.loads(session_token, max_age=SESSION_MAX_AGE)
+        return data.get("user")
+    except (BadSignature, SignatureExpired):
+        return None
 
 
 # ── Shared state ─────────────────────────────────────────────────────────────
@@ -493,14 +537,91 @@ async def video_loop():
     print("[INFO] Video loop stopped.")
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Auth Routes ──────────────────────────────────────────────────────────────
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    return Path("templates/login.html").read_text(encoding="utf-8")
+
+
+@app.post("/login")
+async def login(request: Request):
+    body = await request.json()
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+
+    row = db_conn.execute(
+        "SELECT password FROM users WHERE username = ?", (username,)
+    ).fetchone()
+
+    if not row or not verify_password(password, row[0]):
+        return JSONResponse({"detail": "Invalid username or password"}, status_code=401)
+
+    token = create_session(username)
+    response = JSONResponse({"detail": "ok"})
+    response.set_cookie(
+        key="session",
+        value=token,
+        httponly=True,
+        max_age=SESSION_MAX_AGE,
+        samesite="lax",
+    )
+    return response
+
+
+@app.get("/signup", response_class=HTMLResponse)
+async def signup_page():
+    return Path("templates/signup.html").read_text(encoding="utf-8")
+
+
+@app.post("/signup")
+async def signup(request: Request):
+    body = await request.json()
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+
+    if len(username) < 3:
+        return JSONResponse({"detail": "Username must be at least 3 characters"}, status_code=400)
+    if len(password) < 4:
+        return JSONResponse({"detail": "Password must be at least 4 characters"}, status_code=400)
+
+    existing = db_conn.execute(
+        "SELECT id FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    if existing:
+        return JSONResponse({"detail": "Username already taken"}, status_code=409)
+
+    hashed = hash_password(password)
+    db_conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed))
+    db_conn.commit()
+    print(f"[AUTH] New user created: {username}")
+    return JSONResponse({"detail": "Account created"})
+
+
+@app.post("/logout")
+async def logout():
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie("session")
+    return response
+
+
+# ── Protected Routes ─────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
-async def index():
-    return Path("templates/index.html").read_text(encoding="utf-8")
+async def index(request: Request):
+    session_token = request.cookies.get("session")
+    username = get_current_user(session_token)
+    if not username:
+        return RedirectResponse(url="/login", status_code=302)
+    html = Path("templates/index.html").read_text(encoding="utf-8")
+    # Inject username into the page
+    html = html.replace("{{USERNAME}}", username)
+    return HTMLResponse(html)
 
 
 @app.post("/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(request: Request, file: UploadFile = File(...)):
+    session_token = request.cookies.get("session")
+    if not get_current_user(session_token):
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
     file_path = f"uploaded_{file.filename}"
     with open(file_path, "wb") as buf:
         shutil.copyfileobj(file.file, buf)
@@ -509,6 +630,11 @@ async def upload_video(file: UploadFile = File(...)):
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    # Validate session cookie on WebSocket upgrade
+    session_token = ws.cookies.get("session")
+    if not get_current_user(session_token):
+        await ws.close(code=4001, reason="Unauthorized")
+        return
     await ws.accept()
     state.clients.append(ws)
     print(f"[WS] Client connected  ({len(state.clients)} total)")

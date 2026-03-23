@@ -303,7 +303,22 @@
   <span id="status-text">Disconnected</span>
   <div class="spacer"></div>
   <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="fps-counter"></span>
+  <span style="font-size:12px;color:var(--accent);font-weight:500;margin-left:8px">👤 {{USERNAME}}</span>
+  <button onclick="logout()" style="
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: 4px;
+  " onmouseover="this.style.borderColor='var(--danger)'; this.style.color='var(--danger)'"
+     onmouseout="this.style.borderColor='var(--border)'; this.style.color='var(--muted)'"
+  >Logout</button>
 </div>
+
 
 <!-- ── Main layout ── -->
 <div class="main">
@@ -394,6 +409,13 @@ let framesSinceLastSec = 0;
 let fpsDisplay = 0;
 let lastViolationCount = 0;
 let lastAlertFrame = -50;
+
+// ── Logout ────────────────────────────────────────────────────────────────
+async function logout() {
+  await fetch('/logout', { method: 'POST' });
+  window.location.href = '/login';
+}
+
 
 // ── Toast Notification System ─────────────────────────────────────────────
 function createToastContainer() {
