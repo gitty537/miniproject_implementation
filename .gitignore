@@ -1,27 +1,39 @@
-# Environment
+# ── Virtual environment ──────────────────────────────────────────
 .venv/
 venv/
 env/
 
-# Python Cache
+# ── Python cache ─────────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
 
-# Database (Do not push your local records!)
+# ── Database ─────────────────────────────────────────────────────
+# Do not push local alert logs
 alerts.db
 *.sqlite3
 
-# Uploaded & Temporary Video Files
+# ── Uploaded & local video files ─────────────────────────────────
 uploaded_*
 *.mp4
 *.avi
 *.mov
+*.mkv
+video1.mp4
 
-# Debugging Scripts / Scratchpad
+# ── Old model format (now using .onnx) ───────────────────────────
+best.pt
+
+# ── Debug / scratch files ─────────────────────────────────────────
+err.txt
+err2.txt
+err3.txt
 err500.txt
+error_log.txt
+inspect_onnx.py
 test_server.py
 test.py
 
-# IDE / Editor Files
+# ── IDE / editor settings ─────────────────────────────────────────
 .vscode/
 .idea/
